@@ -19,6 +19,7 @@ package de.db.dbanalytics.osm;/* ***********************************************
 
 import de.topobyte.osm4j.core.model.iface.OsmWay;
 import de.topobyte.osm4j.core.model.util.OsmModelUtil;
+import gnu.trove.list.TLongList;
 
 import java.util.Map;
 
@@ -28,9 +29,29 @@ import java.util.Map;
 public class HighwayHandler implements OsmWayHandler {
 
 
+    private int getDefaultLanes(String level) {
+        return 1;
+    }
+
+    private double getDefaultFreespeed(String level) {
+        return 0;
+    }
+
+    private double getDefaultCapacity(String level) {
+        return 0;
+    }
+
+    private double calculateLenght(Long from, Long to) {
+        return 0;
+    }
 
     public void handle(OsmWay way, NetworkBuilder builder) {
         Map<String, String> tags = OsmModelUtil.getTagsAsMap(way);
+        /*
+        Get highway level and return if no highway tag present.
+         */
+        String level = tags.get(OsmTags.KEY_HIGHWAY);
+        if(level == null) return;
         /*
         Check access.
          */
@@ -38,10 +59,10 @@ public class HighwayHandler implements OsmWayHandler {
         /*
         Infere one-way situation.
          */
+        int oneway = 0;
         /*
         If a roundabout, oneway=yes is implied.
          */
-        int oneway = 0;
         if(OsmTags.VALUE_ROUNDABOUT.equalsIgnoreCase(tags.get(OsmTags.KEY_JUNCTION))) {
             oneway = 1;
         }
@@ -53,6 +74,62 @@ public class HighwayHandler implements OsmWayHandler {
             if (ValueUtils.evaluateYes(onewayValue)) oneway = 1;
             else if(ValueUtils.evaluteNo(onewayValue)) oneway = 0;
             else if(OsmTags.VALUE_MINUSONE.equalsIgnoreCase(onewayValue)) oneway = -1;
+        }
+        /*
+        Evaluate maxspeed tag.
+         */
+        double freespeed = getDefaultFreespeed(level);
+        String maxspeedValue = tags.get(OsmTags.KEY_MAXSPEED);
+        if(maxspeedValue != null) {
+            String tokens[] = maxspeedValue.split("\\s*");
+            if(tokens.length > 0) {
+                try {
+                    freespeed = Double.parseDouble(tokens[0]);
+                } catch (NumberFormatException e) {
+                    // do nothing
+                }
+            }
+            // TODO: unit parsing, for now assume km/h
+            freespeed = freespeed * 3.6;
+        }
+        /*
+        Evaluate lanes tag.
+         */
+        int lanes = getDefaultLanes(level);
+        String lanesValue = tags.get(OsmTags.KEY_LANES);
+        if(lanesValue != null) {
+            try {
+                lanes = (int)Double.parseDouble(lanesValue);
+            } catch (NumberFormatException e) {
+
+            }
+        }
+        /*
+        Lanes specifies the total number of line for both direction. If no one-way distribute lanes over both directions.
+         */
+        if(oneway == 0) {
+            lanes = Math.max(1, lanes/2);
+        }
+        /*
+        Calculate capacity.
+         */
+        double capacity = getDefaultCapacity(level) * lanes;
+        /*
+        Loop through nodes and create links.
+         */
+        TLongList nodes = OsmModelUtil.nodesAsList(way);
+        if(oneway == -1) {
+            nodes.reverse();
+        }
+
+        Long fromNode = nodes.get(0);
+        for(int i = 1; i < nodes.size(); i++) {
+            Long toNode = nodes.get(i);
+
+            double lenght = calculateLenght(fromNode, toNode);
+
+            builder.addLink(fromNode, toNode, way.getId(), lanes, freespeed, capacity);
+            if(oneway != 0) builder.addLink(toNode, fromNode, way.getId(), lanes, freespeed, capacity);
         }
     }
 }

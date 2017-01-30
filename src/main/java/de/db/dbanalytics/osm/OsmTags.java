@@ -38,9 +38,15 @@ public interface OsmTags {
 
     String VALUE_ROUNDABOUT = "roundabout";
 
+    String KEY_HIGHWAY = "highway";
+
     String KEY_ACCESS = "access";
 
     String KEY_JUNCTION = "junction";
 
     String KEY_ONEWAY = "oneway";
+
+    String KEY_MAXSPEED = "maxspeed";
+
+    String KEY_LANES = "lanes";
 }
